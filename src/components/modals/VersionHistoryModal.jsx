@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { safeDocumentUrl } from "../../utils/urlSecurity";
 
-export default function VersionHistoryModal({ open, station, doc, isAdmin, onClose, onPublish }) {
+export default function VersionHistoryModal({ open, station, doc, canEdit, onClose, onPublish }) {
   const [tag, setTag] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
@@ -24,8 +25,8 @@ export default function VersionHistoryModal({ open, station, doc, isAdmin, onClo
   const history = doc.history || [];
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl p-6 relative max-h-[90vh] flex flex-col">
+    <div className="modal-backdrop">
+      <div className="modal-panel modal-panel-lg max-h-[92vh] flex flex-col">
         <div className="flex justify-between items-center pb-3 border-b border-slate-200">
           <div>
             <h3 className="text-lg font-bold text-slate-900">{doc.label} - Revision Logs</h3>
@@ -51,9 +52,9 @@ export default function VersionHistoryModal({ open, station, doc, isAdmin, onClo
               <p className="text-xs text-slate-600 font-medium">Main document currently serving station operations.</p>
             </div>
             <a
-              href={doc.url || "#"}
+              href={safeDocumentUrl(doc.url)}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm shrink-0"
             >
               <span>Open Active File</span>
@@ -63,7 +64,7 @@ export default function VersionHistoryModal({ open, station, doc, isAdmin, onClo
             </a>
           </div>
 
-          {isAdmin && (
+          {canEdit && (
             <div className="bg-slate-50 border border-dashed border-amber-300 rounded-xl p-4">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
@@ -137,9 +138,9 @@ export default function VersionHistoryModal({ open, station, doc, isAdmin, onClo
                         <p className="text-xs text-slate-600 mt-1">{h.note || "No revision comments."}</p>
                       </div>
                       <a
-                        href={h.url || "#"}
+                        href={safeDocumentUrl(h.url)}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline flex items-center gap-1"
                       >
                         <span>View Archived File</span>

@@ -13,6 +13,7 @@ import ConfirmModal from "./components/modals/ConfirmModal";
 import SectionModal from "./components/modals/SectionModal";
 import StationModal from "./components/modals/StationModal";
 import VersionHistoryModal from "./components/modals/VersionHistoryModal";
+import UserManagementModal from "./components/modals/UserManagementModal";
 
 export default function App() {
   const {
@@ -27,7 +28,7 @@ export default function App() {
     moveStation,
     publishNewVersion,
   } = useRailwayData();
-  const { isAdmin, userEmail, login, logout } = useAdmin();
+  const { isAuthenticated, isAdmin, canEdit, canDelete, role, userEmail, login, logout } = useAdmin();
 
   const [search, setSearch] = useState("");
   const [activeDivisionFilter, setActiveDivisionFilter] = useState("ALL");
@@ -40,6 +41,7 @@ export default function App() {
   const toastTimer = useRef(null);
 
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
   const [confirmState, setConfirmState] = useState({ open: false, title: "", message: "", onConfirm: null });
   const [versionModal, setVersionModal] = useState({ open: false, stationId: null, docId: null });
   const [sectionModal, setSectionModal] = useState({ open: false, editingId: null });
@@ -114,6 +116,8 @@ export default function App() {
     });
   }
 
+  const totalStations = sections.reduce((sum, sec) => sum + sec.stations.length, 0);
+  const totalDocuments = sections.reduce((sum, sec) => sum + sec.stations.reduce((n, st) => n + st.docs.length, 0), 0);
   const overallStatsText = `${sections.length} Sections | ${totalStationsInFilter} Total Stations`;
 
   // If the division a filter points to no longer exists (e.g. its last section was deleted), fall back to "All".
@@ -152,9 +156,9 @@ export default function App() {
 
   // ---------- admin ----------
   const handleAdminToggle = async () => {
-    if (isAdmin) {
+    if (isAuthenticated) {
       await logout();
-      showToast("Logged out of Admin mode");
+      showToast("Logged out");
     } else {
       setAdminAuthOpen(true);
     }
@@ -273,17 +277,21 @@ export default function App() {
 
       <TopNav
         isAdmin={isAdmin}
+        isAuthenticated={isAuthenticated}
+        role={role}
         userEmail={userEmail}
         onAdminToggle={handleAdminToggle}
         search={search}
         onSearchChange={setSearch}
         onToggleSidebar={() => setSidebarOpen(true)}
+        onOpenUserManagement={() => setUserManagementOpen(true)}
       />
 
       <Toolbar
         status={status}
         isSyncing={isSyncing}
         isAdmin={isAdmin}
+        canEdit={canEdit}
         onRefresh={() => fetchData()}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
@@ -300,7 +308,8 @@ export default function App() {
           activeSectionFilter={activeSectionFilter}
           onSelectDivision={handleDivisionSelect}
           onSelectSection={handleSelectSection}
-          isAdmin={isAdmin}
+          canEdit={canEdit}
+          canDelete={canDelete}
           onEditSection={openRenameSection}
           onDeleteSection={handleDeleteSection}
           onAddStationToSection={openAddStation}
@@ -308,10 +317,36 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
         />
 
-        <main className="flex-1 min-w-0 p-3 sm:p-5 space-y-4">
+        <main className="app-grid flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5">
+          <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,.06)]">
+            <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
+            <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-cyan-100/50 blur-3xl" />
+            <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.16em] text-blue-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Directory overview
+                </div>
+                <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">Section & Station Directory</h1>
+                <p className="mt-1.5 text-xs leading-5 text-slate-500 sm:text-sm">Browse railway sections, stations and linked document revisions from one organized workspace.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+                {[
+                  ["Divisions", divisions.length, "bg-violet-50 text-violet-700"],
+                  ["Sections", sections.length, "bg-blue-50 text-blue-700"],
+                  ["Stations", totalStations, "bg-emerald-50 text-emerald-700"],
+                  ["Documents", totalDocuments, "bg-amber-50 text-amber-700"],
+                ].map(([label, value, style]) => (
+                  <div key={label} className="rounded-xl border border-slate-200/80 bg-white/80 p-3 shadow-sm backdrop-blur">
+                    <div className={`mb-2 inline-flex rounded-lg px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider ${style}`}>{label}</div>
+                    <div className="text-xl font-black text-slate-900">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
           {(status.state === "error" || status.state === "unconfigured") && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex justify-between items-center font-medium">
-              <span dangerouslySetInnerHTML={{ __html: status.message }} />
+              <span>{status.message}</span>
               <button onClick={() => fetchData()} className="underline font-bold hover:text-amber-950">
                 Retry Connection
               </button>
@@ -327,7 +362,7 @@ export default function App() {
               </div>
               <h3 className="text-base font-bold text-slate-800">No Sections Available</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">There are currently no sections in the directory.</p>
-              {isAdmin && (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={openAddSection}
@@ -350,7 +385,8 @@ export default function App() {
                       key={section.id}
                       section={section}
                       filteredStations={filteredStations}
-                      isAdmin={isAdmin}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
                       onEditStation={openEditStation}
                       onDeleteStation={handleDeleteStation}
                       onMoveStation={handleMoveStation}
@@ -368,7 +404,8 @@ export default function App() {
                 key={section.id}
                 section={section}
                 filteredStations={filteredStations}
-                isAdmin={isAdmin}
+                canEdit={canEdit}
+                canDelete={canDelete}
                 onEditStation={openEditStation}
                 onDeleteStation={handleDeleteStation}
                 onMoveStation={handleMoveStation}
@@ -385,12 +422,14 @@ export default function App() {
         open={versionModal.open}
         station={versionStation}
         doc={versionDoc}
-        isAdmin={isAdmin}
+        canEdit={canEdit}
         onClose={closeVersionHistory}
         onPublish={handlePublishNewVersion}
       />
 
       <AdminAuthModal open={adminAuthOpen} onClose={() => setAdminAuthOpen(false)} onSubmit={handleAdminLoginSubmit} />
+
+      <UserManagementModal open={userManagementOpen && isAdmin} onClose={() => setUserManagementOpen(false)} onToast={showToast} />
 
       <ConfirmModal
         open={confirmState.open}

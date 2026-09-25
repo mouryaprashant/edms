@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { makeId, DEFAULT_DOC_CATEGORIES } from "../../utils/normalize";
+import { makeId, DEFAULT_DOC_CATEGORIES, DEFAULT_DOCUMENT_NAMES } from "../../utils/normalize";
 import { uploadDocumentToDrive } from "../../utils/googleDrive";
+import { isSafeDocumentUrl } from "../../utils/urlSecurity";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GDRIVE_ROOT_FOLDER_ID = import.meta.env.VITE_GDRIVE_ROOT_FOLDER_ID || "";
@@ -8,9 +9,9 @@ const DRIVE_UPLOAD_CONFIGURED = Boolean(GOOGLE_CLIENT_ID && GDRIVE_ROOT_FOLDER_I
 
 function defaultDocRows() {
   return [
-    { rowId: makeId("row"), id: makeId("doc"), label: "SIP", category: "Plans", url: "", version: "Alt-A", history: [] },
-    { rowId: makeId("row"), id: makeId("doc"), label: "ESP", category: "Plans", url: "", version: "Alt-A", history: [] },
-    { rowId: makeId("row"), id: makeId("doc"), label: "SWR", category: "General", url: "", version: "v1.0", history: [] },
+    { rowId: makeId("row"), id: makeId("doc"), label: "SIP", description: "", category: "Plans", url: "", version: "Alt-A", history: [] },
+    { rowId: makeId("row"), id: makeId("doc"), label: "ESP", description: "", category: "Plans", url: "", version: "Alt-A", history: [] },
+    { rowId: makeId("row"), id: makeId("doc"), label: "RSP", description: "", category: "Plans", url: "", version: "Alt-A", history: [] },
   ];
 }
 
@@ -58,6 +59,7 @@ export default function StationModal({ open, sections, editingSectionId, editing
               rowId: makeId("row"),
               id: d.id,
               label: d.label,
+              description: d.description || "",
               category: d.category || "General",
               url: d.url,
               version: d.version,
@@ -111,8 +113,8 @@ export default function StationModal({ open, sections, editingSectionId, editing
   // Category suggestions: presets plus any custom categories already used elsewhere in the directory.
   const categorySuggestions = useMemo(() => {
     const set = new Set(DEFAULT_DOC_CATEGORIES);
-    sections.forEach((s) => s.stations.forEach((st) => st.docs.forEach((d) => set.add(d.category || "General"))));
-    return Array.from(set);
+    sections.forEach((s) => s.stations.forEach((st) => st.docs.forEach((d) => set.add(d.category || ""))));
+    return Array.from(set).filter(Boolean);
   }, [sections]);
 
   if (!open) return null;
@@ -126,7 +128,7 @@ export default function StationModal({ open, sections, editingSectionId, editing
   };
 
   const addRow = () => {
-    setDocRows((rows) => [...rows, { rowId: makeId("row"), id: makeId("doc"), label: "", category: "General", url: "", version: "Alt-A", history: [] }]);
+    setDocRows((rows) => [...rows, { rowId: makeId("row"), id: makeId("doc"), label: "", description: "", category: "Plans", url: "", version: "Alt-A", history: [] }]);
   };
 
   const triggerUpload = (rowId) => {
@@ -160,6 +162,11 @@ export default function StationModal({ open, sections, editingSectionId, editing
   const handleSubmit = (e) => {
     e.preventDefault();
     const today = new Date().toISOString().split("T")[0];
+    const invalidUrl = docRows.some((r) => r.url.trim() && !isSafeDocumentUrl(r.url.trim()));
+    if (invalidUrl) {
+      alert("Please enter only valid HTTP/HTTPS document URLs.");
+      return;
+    }
     const docs = docRows
       .filter((r) => r.label.trim() || r.url.trim())
       .map((r) => {
@@ -173,6 +180,7 @@ export default function StationModal({ open, sections, editingSectionId, editing
         return {
           id: r.id,
           label: r.label.trim() || "Document",
+          description: r.description?.trim() || "",
           category: r.category?.trim() || "General",
           url: trimmedUrl,
           version: trimmedVersion,
@@ -193,8 +201,8 @@ export default function StationModal({ open, sections, editingSectionId, editing
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+    <div className="modal-backdrop">
+      <div className="modal-panel modal-panel-lg max-h-[92vh] overflow-y-auto custom-scrollbar">
         <div className="flex justify-between items-center pb-3 border-b border-slate-100">
           <h3 className="text-lg font-bold text-slate-900">{editingStationId ? "Edit Station Details" : "Add New Station"}</h3>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -288,39 +296,74 @@ export default function StationModal({ open, sections, editingSectionId, editing
             </div>
             <div className="space-y-2">
               <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelected} />
-              <datalist id="doc-category-suggestions">
-                {categorySuggestions.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-              </datalist>
+              {/* Presets are offered through native dropdowns; selecting Custom opens a free-text field. */}
               {docRows.map((row) => {
                 const status = uploadStatus[row.rowId];
                 return (
                   <div key={row.rowId} className="doc-input-row space-y-1">
                     <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-2">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        <input
-                          type="text"
-                          value={row.label}
-                          onChange={(e) => updateRow(row.rowId, "label", e.target.value)}
-                          placeholder="Doc Name (SIP, ESP, etc.)"
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                        />
-                        <input
-                          type="text"
-                          list="doc-category-suggestions"
-                          value={row.category ?? "General"}
-                          onChange={(e) => updateRow(row.rowId, "category", e.target.value)}
-                          placeholder="Category (Plans, Sanctions...)"
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                        />
-                        <input
-                          type="text"
-                          value={row.version}
-                          onChange={(e) => updateRow(row.rowId, "version", e.target.value)}
-                          placeholder="Version (Alt-A)"
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-mono"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Document</label>
+                          <select
+                            value={DEFAULT_DOCUMENT_NAMES.includes(row.label) ? row.label : "__CUSTOM__"}
+                            onChange={(e) => updateRow(row.rowId, "label", e.target.value === "__CUSTOM__" ? "" : e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                          >
+                            {DEFAULT_DOCUMENT_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+                            <option value="__CUSTOM__">Custom name...</option>
+                          </select>
+                          {!DEFAULT_DOCUMENT_NAMES.includes(row.label) && (
+                            <input
+                              type="text"
+                              value={row.label}
+                              onChange={(e) => updateRow(row.rowId, "label", e.target.value)}
+                              placeholder="Enter custom document name"
+                              className="mt-1.5 w-full px-2.5 py-1.5 border border-blue-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-blue-50/30"
+                              autoFocus={row.label === ""}
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Description</label>
+                          <input
+                            type="text"
+                            value={row.description || ""}
+                            onChange={(e) => updateRow(row.rowId, "description", e.target.value)}
+                            placeholder="Short description"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Category</label>
+                          <select
+                            value={DEFAULT_DOC_CATEGORIES.includes(row.category) ? row.category : "__CUSTOM__"}
+                            onChange={(e) => updateRow(row.rowId, "category", e.target.value === "__CUSTOM__" ? "" : e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                          >
+                            {DEFAULT_DOC_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                            <option value="__CUSTOM__">Custom name...</option>
+                          </select>
+                          {!DEFAULT_DOC_CATEGORIES.includes(row.category) && (
+                            <input
+                              type="text"
+                              value={row.category || ""}
+                              onChange={(e) => updateRow(row.rowId, "category", e.target.value)}
+                              placeholder="Enter custom category"
+                              className="mt-1.5 w-full px-2.5 py-1.5 border border-blue-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-blue-50/30"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Revision</label>
+                          <input
+                            type="text"
+                            value={row.version}
+                            onChange={(e) => updateRow(row.rowId, "version", e.target.value)}
+                            placeholder="Alt-A"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-mono"
+                          />
+                        </div>
                       </div>
                       <div className="flex flex-col sm:flex-row items-center gap-2">
                         <input

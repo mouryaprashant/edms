@@ -2,8 +2,8 @@ export default function ConfirmModal({ open, title, message, onCancel, onConfirm
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm p-6 relative">
+    <div className="modal-backdrop">
+      <div className="modal-panel modal-panel-sm">
         <h3 className="text-base font-bold text-slate-900 mb-1">{title}</h3>
         <p className="text-xs text-slate-600 mb-4">{message}</p>
         <div className="flex justify-end gap-2">

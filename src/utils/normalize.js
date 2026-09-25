@@ -1,10 +1,14 @@
 export function makeId(prefix = "doc") {
-  return `${prefix}_${Math.random().toString(36).substr(2, 9)}`;
+  if (globalThis.crypto?.randomUUID) return `${prefix}_${globalThis.crypto.randomUUID()}`;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  return `${prefix}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 // Presets shown as suggestions in the admin form — admins can still type any
 // custom category; these are just a sensible starting point.
-export const DEFAULT_DOC_CATEGORIES = ["Plans", "Sanctions", "Estimates", "Inspection Reports", "Correspondence", "Other"];
+export const DEFAULT_DOCUMENT_NAMES = ["ESP", "SIP", "RSP", "PD", "VDU", "ST/LT", "Circuit"];
+export const DEFAULT_DOC_CATEGORIES = ["Plans", "Letters", "Sanction"];
 
 // Same idea for divisions — a starting set of presets, not a hard-coded list.
 // Add more here (or just type a new one in the Section form) as your office adds divisions.
@@ -14,6 +18,7 @@ export function normalizeDoc(d) {
   return {
     id: d.id || makeId("doc"),
     label: d.label || "Document",
+    description: d.description || "",
     category: d.category || "General",
     url: d.url || "",
     version: d.version || "Alt-A",

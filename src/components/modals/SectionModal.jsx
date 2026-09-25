@@ -30,8 +30,8 @@ export default function SectionModal({ open, editingSection, allSections, onClos
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md p-6 relative">
+    <div className="modal-backdrop">
+      <div className="modal-panel modal-panel-md">
         <div className="flex justify-between items-center pb-3 border-b border-slate-100">
           <h3 className="text-lg font-bold text-slate-900">{editingSection ? "Edit Section" : "Add New Section"}</h3>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">

@@ -157,114 +157,54 @@ src/
     googleDrive.js              — direct-to-Drive upload via GIS + drive.file scope
 ```
 
-## Admin login (Supabase Auth)
+## Admin login and database authorization
 
-Admin access uses real Supabase Auth (email/password) instead of the old
-client-side PIN. This matters for more than UX: the old PIN lived entirely
-in the browser, so anyone who opened dev tools could read your Supabase
-anon key and write to the database directly, bypassing the PIN completely.
-Real auth lets you close that hole at the database level with Row Level
-Security — the PIN alone never could.
+The application now separates **authentication** from **authorization**. A valid
+Supabase login is not enough to become an administrator. The database assigns
+each user a role in `public.user_roles` (`admin`, `editor`, or `viewer`), and
+Supabase Row Level Security (RLS) enforces those roles. The React UI is only a
+convenience layer; an attacker who bypasses the UI still cannot write to the
+database without an appropriate role.
 
-**1. Create your admin account(s)**
+Run `supabase-security-migration.sql` in the Supabase SQL Editor. Then create
+your administrator in **Authentication → Users** and assign the role with the
+SQL statement at the bottom of that migration. There is deliberately no public
+client policy allowing users to create or change their own roles.
 
-You are not meant to expose public sign-up for this. Create accounts
-yourself:
-- Supabase Dashboard → **Authentication → Users → Add user** → set an email
-  and password directly (instant, good for internal/admin accounts), or
-- **Add user → Send invite email** if you'd rather the person set their own
-  password.
+The default security model is:
 
-**2. Lock down writes with Row Level Security**
+- `viewer`: read only
+- `editor`: insert/update directory records
+- `admin`: insert/update/delete directory records and read the audit log
+- directory rows remain publicly readable to preserve the existing public-view
+  mode; change the SELECT policies if the directory itself is confidential
 
-This is the step that actually makes admin login meaningful — without it,
-your anon key can still write to the database even after you add login,
-because by default a fresh Supabase table has no RLS restricting the anon
-role at all. Run this in the Supabase SQL editor:
+Every section/station INSERT, UPDATE and DELETE is protected by RLS. Changes
+are also written automatically to `audit_log`.
 
-```sql
--- Turn on RLS (do this for both tables)
-alter table sections enable row level security;
-alter table stations enable row level security;
+### Google Drive security
 
--- Public (anon key) can still read everything — this keeps "Public View Mode" working
-create policy "Public read access" on sections
-  for select using (true);
-create policy "Public read access" on stations
-  for select using (true);
+The browser upload uses Google's narrow `drive.file` scope, but uploaded files
+are **not** made public by the application. The old `anyone` link-sharing step
+has been removed. Keep the Drive root folder private and grant access only to
+the intended administrator Google account(s).
 
--- Only signed-in users can write
-create policy "Authenticated write access" on sections
-  for insert with check (auth.role() = 'authenticated');
-create policy "Authenticated update access" on sections
-  for update using (auth.role() = 'authenticated');
-create policy "Authenticated delete access" on sections
-  for delete using (auth.role() = 'authenticated');
+For highly sensitive documents, the recommended next step is moving the Drive
+upload operation to a trusted Supabase Edge Function so that the browser never
+handles the long-lived credentials of a server-side Drive integration. Never
+place a Google client secret or service-account private key in a `VITE_*`
+environment variable.
 
-create policy "Authenticated write access" on stations
-  for insert with check (auth.role() = 'authenticated');
-create policy "Authenticated update access" on stations
-  for update using (auth.role() = 'authenticated');
-create policy "Authenticated delete access" on stations
-  for delete using (auth.role() = 'authenticated');
-```
+The upload UI also enforces a 25 MB browser-side limit and allows PDF, PNG and
+JPEG files. The application accepts only HTTP/HTTPS document URLs and rejects
+dangerous schemes such as `javascript:`. For high-security deployments, add
+server-side file validation and malware scanning.
 
-After this, even someone who copies your anon key straight out of the
-browser can only read data — every insert/update/delete is rejected by the
-database itself unless they have a valid Supabase Auth session, which is
-exactly what "Admin Login" now grants.
+### Production security checklist
 
-**3. That's it on the app side** — `useAdmin.js` already handles session
-persistence (it survives page refresh) and `AdminAuthModal.jsx` handles the
-email/password form. No further config needed beyond your existing
-`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
-
-## Setting up direct Google Drive upload (optional)
-
-The Admin "Add/Edit Station" form has an **Upload** button next to each
-document's URL field. Click it, pick a PDF, and it uploads straight into
-`(your root folder)/(STATION CODE)/filename.pdf` in Drive, sets link sharing
-to "anyone with the link can view," and fills in the URL automatically. This
-needs two things configured — without them, the button is disabled but
-manual URL entry still works exactly as before.
-
-It uses the **`drive.file`** OAuth scope, which only grants access to files
-the app itself creates — never your whole Drive. That makes it a
-**non-sensitive scope** in Google's classification, so it does **not**
-require Google's app verification process or an annual CASA security
-assessment, even once you're live for real users.
-
-**1. Create a Google Cloud project & OAuth client**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/) → create
-     (or pick) a project.
-   - APIs & Services → Library → enable the **Google Drive API**.
-   - APIs & Services → OAuth consent screen → choose **External** (or
-     **Internal** if everyone using this app is in your Google Workspace
-     org) → add the `.../auth/drive.file` scope → set publishing status to
-     **In production** (safe to do since `drive.file` doesn't need
-     verification — this just avoids the 7-day test-token expiry).
-   - APIs & Services → Credentials → Create Credentials → **OAuth client ID**
-     → Application type: **Web application** → add your app's URL(s) (e.g.
-     `http://localhost:5173` for dev, your real domain for production) under
-     **Authorized JavaScript origins**. Copy the generated Client ID.
-
-**2. Create (or pick) a root Drive folder**
-   - In Drive, create a folder to hold all uploaded station documents (e.g.
-     "eDMS Station Documents").
-   - Open it, copy the folder ID from the URL:
-     `drive.google.com/drive/folders/`**`THIS_PART_IS_THE_ID`**.
-   - Share that folder with whichever Google account(s) will be logging in
-     as admin to upload files (Editor access).
-
-**3. Add both values to `.env`**
-   ```
-   VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
-   VITE_GDRIVE_ROOT_FOLDER_ID=...
-   ```
-
-The first time an admin clicks Upload, Google will show a one-time consent
-popup asking to authorize this app's access to files it creates. After that,
-uploads happen silently in the background for that browser session.
+See `security-checklist.md` for the deployment checklist, including MFA,
+HTTPS, security headers, rate limiting, backups, and testing the RLS policies
+with both admin and non-admin accounts.
 
 ## Setup
 
@@ -299,3 +239,40 @@ app expected — `stations.docs` is a JSON column holding an array of
   back on error instead.
 - **Realtime**: since you're already on Supabase, `supabase.channel(...)` can
   push live updates to every open tab instead of relying on manual "Refresh".
+
+
+## Admin User Management
+
+The application includes an Admin-only **User Management** screen. It supports:
+
+- Creating Viewer and Editor users
+- Changing a user's role between Viewer, Editor and Admin
+- Enabling/disabling users
+- Viewing account and last-sign-in information
+- Preventing an administrator from disabling their own account
+- Preventing the last administrator from being demoted
+
+### Deploy the Edge Function
+
+The browser must never receive the Supabase service-role key. User creation, status changes and role changes are therefore performed by the Supabase Edge Function at:
+
+```text
+supabase/functions/user-management/index.ts
+```
+
+From the Supabase CLI, link the project and deploy:
+
+```bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase functions deploy user-management
+supabase secrets set APP_ORIGIN=https://YOUR-PRODUCTION-DOMAIN.example
+```
+
+For local development, omit `APP_ORIGIN` or set it to the local application origin. Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to the Edge Function environment.
+
+After deployment, sign in as the existing administrator and use **Users** in the top navigation.
+
+### Important password note
+
+The current Admin User Management screen creates accounts with a temporary password chosen by the administrator. Give that temporary password to the user through a secure channel and have the user change it after first sign-in. A future improvement can switch this to Supabase email invitations if SMTP is configured.

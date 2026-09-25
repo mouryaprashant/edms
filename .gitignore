@@ -1,0 +1,17 @@
+# --- Supabase Specifics ---
+.supabase/
+supabase/.temp/
+supabase/**/.env
+
+# --- Standard Web Project Files ---
+.env
+.env.local
+.env.*.local
+node_modules/
+dist/
+build/
+.vite/
+
+# --- System Files ---
+.DS_Store
+Thumbs.db

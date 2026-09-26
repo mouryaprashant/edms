@@ -14,6 +14,7 @@ import SectionModal from "./components/modals/SectionModal";
 import StationModal from "./components/modals/StationModal";
 import VersionHistoryModal from "./components/modals/VersionHistoryModal";
 import UserManagementModal from "./components/modals/UserManagementModal";
+import DivisionModal from "./components/modals/DivisionModal";
 
 export default function App() {
   const {
@@ -22,6 +23,7 @@ export default function App() {
     isSyncing,
     fetchData,
     saveSection,
+    renameDivision,
     deleteSection,
     saveStation,
     deleteStation,
@@ -45,6 +47,7 @@ export default function App() {
   const [confirmState, setConfirmState] = useState({ open: false, title: "", message: "", onConfirm: null });
   const [versionModal, setVersionModal] = useState({ open: false, stationId: null, docId: null });
   const [sectionModal, setSectionModal] = useState({ open: false, editingId: null });
+  const [divisionModal, setDivisionModal] = useState({ open: false, divisionName: "" });
   const [stationModal, setStationModal] = useState({ open: false, editingSectionId: null, editingStationId: null });
 
   const showToast = (message, isError = false) => {
@@ -116,8 +119,6 @@ export default function App() {
     });
   }
 
-  const totalStations = sections.reduce((sum, sec) => sum + sec.stations.length, 0);
-  const totalDocuments = sections.reduce((sum, sec) => sum + sec.stations.reduce((n, st) => n + st.docs.length, 0), 0);
   const overallStatsText = `${sections.length} Sections | ${totalStationsInFilter} Total Stations`;
 
   // If the division a filter points to no longer exists (e.g. its last section was deleted), fall back to "All".
@@ -176,6 +177,21 @@ export default function App() {
   const openAddSection = () => setSectionModal({ open: true, editingId: null });
   const openRenameSection = (id) => setSectionModal({ open: true, editingId: id });
   const closeSectionModal = () => setSectionModal({ open: false, editingId: null });
+
+  const openRenameDivision = (divisionName) => setDivisionModal({ open: true, divisionName });
+  const closeDivisionModal = () => setDivisionModal({ open: false, divisionName: "" });
+
+  const handleSaveDivision = async (newName) => {
+    const oldName = divisionModal.divisionName;
+    const res = await renameDivision(oldName, newName);
+    if (res.ok) {
+      closeDivisionModal();
+      if (activeDivisionFilter === oldName) setActiveDivisionFilter(newName);
+      showToast("✓ Division renamed!");
+    } else {
+      showToast("Failed to rename division: " + (res.error?.message || ""), true);
+    }
+  };
 
   const handleSaveSection = async (name, division, editingId) => {
     const res = await saveSection(name, division, editingId);
@@ -311,6 +327,7 @@ export default function App() {
           canEdit={canEdit}
           canDelete={canDelete}
           onEditSection={openRenameSection}
+          onRenameDivision={openRenameDivision}
           onDeleteSection={handleDeleteSection}
           onAddStationToSection={openAddStation}
           isOpen={sidebarOpen}
@@ -318,32 +335,6 @@ export default function App() {
         />
 
         <main className="app-grid flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5">
-          <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,.06)]">
-            <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
-            <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-cyan-100/50 blur-3xl" />
-            <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-2xl">
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.16em] text-blue-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Directory overview
-                </div>
-                <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">Section & Station Directory</h1>
-                <p className="mt-1.5 text-xs leading-5 text-slate-500 sm:text-sm">Browse railway sections, stations and linked document revisions from one organized workspace.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
-                {[
-                  ["Divisions", divisions.length, "bg-violet-50 text-violet-700"],
-                  ["Sections", sections.length, "bg-blue-50 text-blue-700"],
-                  ["Stations", totalStations, "bg-emerald-50 text-emerald-700"],
-                  ["Documents", totalDocuments, "bg-amber-50 text-amber-700"],
-                ].map(([label, value, style]) => (
-                  <div key={label} className="rounded-xl border border-slate-200/80 bg-white/80 p-3 shadow-sm backdrop-blur">
-                    <div className={`mb-2 inline-flex rounded-lg px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider ${style}`}>{label}</div>
-                    <div className="text-xl font-black text-slate-900">{value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
           {(status.state === "error" || status.state === "unconfigured") && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex justify-between items-center font-medium">
               <span>{status.message}</span>
@@ -437,6 +428,14 @@ export default function App() {
         message={confirmState.message}
         onCancel={() => setConfirmState((c) => ({ ...c, open: false }))}
         onConfirm={() => confirmState.onConfirm && confirmState.onConfirm()}
+      />
+
+      <DivisionModal
+        open={divisionModal.open}
+        divisionName={divisionModal.divisionName}
+        sectionCount={sections.filter((s) => (s.division || "Unassigned") === divisionModal.divisionName).length}
+        onClose={closeDivisionModal}
+        onSave={handleSaveDivision}
       />
 
       <SectionModal open={sectionModal.open} editingSection={editingSectionForModal} allSections={sections} onClose={closeSectionModal} onSave={handleSaveSection} />

@@ -74,6 +74,22 @@ export function useRailwayData() {
     [fetchData]
   );
 
+  const renameDivision = useCallback(
+    async (oldName, newName) => {
+      if (!supabase) return { ok: false };
+      const from = oldName || "Unassigned";
+      const to = (newName || "").trim();
+      if (!to || to === from) return { ok: false, error: new Error("A different division name is required.") };
+
+      const query = supabase.from("sections").update({ division: to }).eq("division", from);
+      const { error } = await query;
+      if (error) return { ok: false, error };
+      await fetchData();
+      return { ok: true };
+    },
+    [fetchData]
+  );
+
   const deleteSection = useCallback(
     async (id) => {
       if (!supabase) return { ok: false };
@@ -205,6 +221,7 @@ export function useRailwayData() {
     isSyncing,
     fetchData,
     saveSection,
+    renameDivision,
     deleteSection,
     saveStation,
     deleteStation,

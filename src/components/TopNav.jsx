@@ -25,10 +25,6 @@ export default function TopNav({ isAdmin, isAuthenticated, role, userEmail, onAd
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className={`hidden items-center gap-2 rounded-xl border px-3 py-2 sm:flex ${isAdmin ? "border-emerald-500/20 bg-emerald-500/10" : "border-slate-700 bg-slate-900"}`}>
-            <span className={`h-2 w-2 rounded-full ${isAdmin ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.7)]" : "bg-slate-500"}`} />
-            <span className="text-[11px] font-semibold text-slate-300">{isAuthenticated ? `${role || "user"} mode` : "Directory"}</span>
-          </div>
           {isAdmin && <button type="button" onClick={onOpenUserManagement} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs font-bold text-slate-200 transition hover:bg-slate-800" title="User management">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m8-8a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8-1v6m3-3h-6" /></svg>
             <span className="hidden lg:inline">Users</span>
